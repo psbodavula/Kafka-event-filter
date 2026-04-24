@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: kafka-event-filter
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/event_filter_db}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: event-filter-group
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+      retries: 3
+
+kafka:
+  topic-pattern: ${KAFKA_TOPIC_PATTERN:events.*}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.eventfilter: DEBUG
+    org.apache.kafka: WARN
