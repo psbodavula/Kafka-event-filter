@@ -1,0 +1,115 @@
+{
+  "mappingName": "UPO_TO_GPI_STATUS_UPDATE",
+  "version": "1.0",
+  "description": "Data-driven mapping from UPO (source payment message) to SWIFT GPI Tracker StatusUpdate API request. Rules extracted from MAP_GPI_PaymentStatusRequest_EPG spreadsheet.",
+  "rules": [
+    {
+      "targetField": "uetr",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/pmtId/uetr",
+      "presence": "REQUIRED",
+      "errorOnMissing": "UETR is required for GPI tracker status update"
+    },
+    {
+      "targetField": "from",
+      "type": "PRESENCE_CHECK",
+      "sourceXpath": "pmtInf/instdAgt/finInstnId/clrSysMmbId/mmbId",
+      "presence": "REQUIRED",
+      "thenRules": [
+        {
+          "targetField": "from",
+          "type": "CONDITIONAL",
+          "sourceXpath": "pmtInf/instdAgt/finInstnId/clrSysMmbId/mmbId",
+          "conditions": [
+            {
+              "matchValues": ["121000248", "0407"],
+              "outputValue": "WFBIUS6SXXX"
+            },
+            {
+              "matchValues": ["026005092", "0509"],
+              "outputValue": "PNBPUS3NNYC"
+            }
+          ],
+          "errorOnNoMatch": "Instructed Agent mmbId is required for FED/CHP Inbound which is missing"
+        }
+      ],
+      "errorOnMissing": "Instructed Agent mmbId is required for FED/CHP Inbound which is missing",
+      "fallbackSourceXpath": "pmtInf/instdAgt/finInstnId/bicFi"
+    },
+    {
+      "targetField": "transaction_status",
+      "type": "CONDITIONAL",
+      "sourceXpath": "wfEvtInf/evtNm",
+      "presence": "REQUIRED",
+      "conditions": [
+        {
+          "matchValues": ["PAYMENT_EXECUTION.EXECUTION.COMPLETED"],
+          "outputValue": "ACCC"
+        },
+        {
+          "matchValues": ["PAYMENT_EXECUTION.RETURN.COMPLETED"],
+          "outputValue": "RJCT"
+        },
+        {
+          "matchValues": ["PAYMENT_EXECUTION.EXECUTION.RING_FENCED"],
+          "outputValue": "ACSP"
+        }
+      ],
+      "errorOnNoMatch": "not GPI eligible for FED/CHP inbound"
+    },
+    {
+      "targetField": "transaction_status_date",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "wfEvtInf/evtDtTm",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "originator",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/dbtr/nm",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "instruction_identification",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/pmtId/txId",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "interbank_settlement_date",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/intrBkSttlmDt",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "interbank_settlement_amount",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/intrBkSttlmAmt/value",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "interbank_settlement_currency",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/intrBkSttlmAmt/ccy",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "charge_type",
+      "type": "MAP_AS_IS",
+      "sourceXpath": "pmtInf/chrgBr",
+      "presence": "OPTIONAL"
+    },
+    {
+      "targetField": "last_update_time",
+      "type": "EXPRESSION",
+      "expression": "CURRENT_TIMESTAMP",
+      "presence": "REQUIRED"
+    },
+    {
+      "targetField": "tracker_informing_party",
+      "type": "HARDCODE",
+      "hardcodedValue": "${swift.api.institution-bic}",
+      "presence": "OPTIONAL"
+    }
+  ]
+}
