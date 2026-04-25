@@ -1,6 +1,6 @@
 # Kafka Event Filter with Rule Engine
 
-A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on simple table-based rules stored in MongoDB. Each rule defines up to 7 column-value conditions — if all match, the rule fires.
+A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on rules stored in MongoDB. Rules match on named fields (`evtApplid`, `evtNm`, `srcChnl`) mapped to nested event payload paths (`wfEvtInf/evtApplid`, `wfEvtInf/evtNm`, `wfPmtOrdrPrcg/srcChnl`). Filtering happens **before the listener** via `RecordFilterStrategy`.
 
 ## Architecture
 
@@ -63,59 +63,60 @@ The app starts on http://localhost:8080.
 
 ### 3. Create Filter Rules
 
-Each rule defines up to 7 column-value conditions. An event matches when **all** non-null columns equal the event's field values.
+Each rule defines conditions on named fields. An event matches when **all** non-null conditions equal the event's nested payload values.
 
-#### Example: Route USD payments from a specific sender
+| Rule Field    | Event Payload Path        | Description              |
+|---------------|---------------------------|--------------------------|
+| `evtApplid`   | `wfEvtInf/evtApplid`      | Event application ID     |
+| `evtNm`       | `wfEvtInf/evtNm`          | Event name               |
+| `srcChnl`     | `wfPmtOrdrPrcg/srcChnl`   | Source channel            |
+
+#### Example: Filter by application ID and event name
 
 ```bash
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "usd-payments-from-deutsche",
-    "description": "Route USD payments from Deutsche Bank",
+    "name": "payment-initiated-swift",
+    "description": "Route SWIFT payment initiated events",
     "topics": ["events.payments"],
-    "column1": "currency",    "value1": "USD",
-    "column2": "senderBic",   "value2": "DEUTDEFF",
-    "column3": "status",      "value3": "ACSP",
+    "evtApplid": "PAYMENTS",
+    "evtNm": "PaymentInitiated",
     "action": "ROUTE",
-    "targetTopic": "events.payments.usd-review",
+    "targetTopic": "events.payments.swift-initiated",
     "priority": 10,
     "enabled": true
   }'
 ```
 
-#### Example: Drop test events
+#### Example: Filter by source channel
 
 ```bash
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "drop-test-events",
-    "description": "Drop events from test environment",
-    "column1": "environment", "value1": "test",
+    "name": "drop-internal-channel",
+    "description": "Drop events from internal channel",
+    "srcChnl": "INTERNAL",
     "action": "DROP",
     "priority": 1,
     "enabled": true
   }'
 ```
 
-#### Example: Full 7-column rule
+#### Example: All 3 conditions
 
 ```bash
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "specific-payment-route",
-    "description": "Route specific cross-border payments",
-    "column1": "messageType",  "value1": "MT103",
-    "column2": "currency",     "value2": "EUR",
-    "column3": "senderBic",    "value3": "DEUTDEFF",
-    "column4": "receiverBic",  "value4": "CHASUS33",
-    "column5": "status",       "value5": "ACSP",
-    "column6": "chargeBearer", "value6": "SHA",
-    "column7": "environment",  "value7": "production",
+    "name": "swift-fin-payments",
+    "description": "Route FIN payments from SWIFT channel",
+    "evtApplid": "FIN",
+    "evtNm": "PaymentCompleted",
+    "srcChnl": "SWIFT",
     "action": "ROUTE",
-    "targetTopic": "events.payments.cross-border",
+    "targetTopic": "events.payments.fin-completed",
     "priority": 5,
     "enabled": true
   }'
@@ -196,19 +197,20 @@ curl http://localhost:8080/api/events/filtered/rule/<rule-id>
 
 ## Rule Matching
 
-Each rule has up to 7 column-value pairs. When a Kafka event arrives, the engine checks all enabled rules in priority order. A rule matches if **every** non-null column in the rule equals the corresponding field in the event payload.
+Each rule maps named fields to nested event payload paths. When a Kafka event arrives, the `RecordFilterStrategy` checks all enabled rules **before the listener** — unmatched messages are silently discarded.
 
-| Rule Field | Description |
-|------------|-------------|
-| `column1` / `value1` | First condition: event field name and expected value |
-| `column2` / `value2` | Second condition (optional) |
-| `column3` / `value3` | Third condition (optional) |
-| `column4` / `value4` | Fourth condition (optional) |
-| `column5` / `value5` | Fifth condition (optional) |
-| `column6` / `value6` | Sixth condition (optional) |
-| `column7` / `value7` | Seventh condition (optional) |
+```
+Kafka Poll → RecordFilterStrategy (rules check) → discard if no match
+                                                 → @KafkaListener if matched → UPO → GPI Tracker
+```
 
-Supports dot notation for nested fields: `"debtor.address.country"`.
+| Rule Field    | Event Payload Path        | Description              |
+|---------------|---------------------------|--------------------------|
+| `evtApplid`   | `wfEvtInf/evtApplid`      | Event application ID     |
+| `evtNm`       | `wfEvtInf/evtNm`          | Event name               |
+| `srcChnl`     | `wfPmtOrdrPrcg/srcChnl`   | Source channel            |
+
+A rule matches when ALL non-null fields equal the event's corresponding nested values.
 
 ## SWIFT GPI Tracker Integration
 

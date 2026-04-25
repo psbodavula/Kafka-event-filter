@@ -49,12 +49,12 @@ public class RuleEngine {
     }
 
     @SuppressWarnings("unchecked")
-    private Object resolveFieldValue(Map<String, Object> payload, String fieldName) {
-        if (!fieldName.contains(".")) {
-            return payload.get(fieldName);
+    private Object resolveFieldValue(Map<String, Object> payload, String path) {
+        if (!path.contains("/") && !path.contains(".")) {
+            return payload.get(path);
         }
 
-        String[] parts = fieldName.split("\\.");
+        String[] parts = path.contains("/") ? path.split("/") : path.split("\\.");
         Object current = payload;
         for (String part : parts) {
             if (current instanceof Map) {

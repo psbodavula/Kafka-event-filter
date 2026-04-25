@@ -22,27 +22,14 @@ public class FilterRuleRequest {
 
     private List<String> topics;
 
-    // Column-value conditions (up to 7)
-    private String column1;
-    private String value1;
+    /** Matches wfEvtInf/evtApplid */
+    private String evtApplid;
 
-    private String column2;
-    private String value2;
+    /** Matches wfEvtInf/evtNm */
+    private String evtNm;
 
-    private String column3;
-    private String value3;
-
-    private String column4;
-    private String value4;
-
-    private String column5;
-    private String value5;
-
-    private String column6;
-    private String value6;
-
-    private String column7;
-    private String value7;
+    /** Matches wfPmtOrdrPrcg/srcChnl */
+    private String srcChnl;
 
     @Builder.Default
     private RuleAction action = RuleAction.FORWARD;
