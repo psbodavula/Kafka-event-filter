@@ -1,6 +1,5 @@
 package com.eventfilter.swift.model;
 
-import com.eventfilter.model.upo.UniversalPaymentObject;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,6 +12,8 @@ import java.time.Instant;
 /**
  * Request body for SWIFT GPI Tracker Status Update API.
  * PUT /swift-apitracker/v5/payments/{uetr}/status
+ *
+ * Mapping from UPO is handled by MapStruct (UpoToGpiRequestMapper).
  */
 @Data
 @Builder
@@ -61,52 +62,6 @@ public class GpiStatusUpdateRequest {
 
     @JsonProperty("last_update_time")
     private Instant lastUpdateTime;
-
-    /**
-     * Build a GPI status update request directly from a UPO — no manual mapping needed.
-     */
-    public static GpiStatusUpdateRequest fromUpo(UniversalPaymentObject upo, String institutionBic) {
-        GpiStatusUpdateRequestBuilder builder = GpiStatusUpdateRequest.builder()
-                .from(upo.getDebtorAgentBic())
-                .to(upo.getCreditorAgentBic())
-                .originator(upo.getDebtorName())
-                .transactionStatus(upo.getTransactionStatus() != null ? upo.getTransactionStatus() : "ACSP")
-                .trackerInformingParty(institutionBic)
-                .instructionIdentification(upo.getTransactionReference())
-                .lastUpdateTime(Instant.now());
-
-        if (upo.getInterbankSettlementAmount() != null) {
-            builder.interbankSettlementAmount(upo.getInterbankSettlementAmount())
-                   .interbankSettlementCurrency(upo.getInterbankSettlementCurrency());
-        }
-
-        if (upo.getValueDate() != null) {
-            builder.interbankSettlementDate(upo.getValueDate().toString());
-        }
-
-        if (upo.getInstructedAmount() != null) {
-            builder.instructedAmount(InstructedAmount.builder()
-                    .amount(upo.getInstructedAmount())
-                    .currency(upo.getInstructedCurrency())
-                    .build());
-        }
-
-        if (upo.getChargesAmount() != null) {
-            builder.chargeAmount(ChargeAmount.builder()
-                    .amount(upo.getChargesAmount())
-                    .currency(upo.getChargesCurrency())
-                    .build())
-                   .chargeType(upo.getChargeBearer());
-        }
-
-        if (upo.getStatusReasonCode() != null) {
-            builder.transactionStatusReason(TransactionStatusReason.builder()
-                    .reasonCode(upo.getStatusReasonCode())
-                    .build());
-        }
-
-        return builder.build();
-    }
 
     @Data
     @Builder

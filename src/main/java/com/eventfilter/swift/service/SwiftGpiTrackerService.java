@@ -1,5 +1,6 @@
 package com.eventfilter.swift.service;
 
+import com.eventfilter.converter.mapper.UpoToGpiRequestMapper;
 import com.eventfilter.model.upo.UniversalPaymentObject;
 import com.eventfilter.swift.config.SwiftApiConfig;
 import com.eventfilter.swift.model.GpiStatusUpdateRequest;
@@ -18,11 +19,14 @@ public class SwiftGpiTrackerService {
 
     private final SwiftApiConfig swiftApiConfig;
     private final RestTemplate swiftRestTemplate;
+    private final UpoToGpiRequestMapper mapper;
 
     public SwiftGpiTrackerService(SwiftApiConfig swiftApiConfig,
-                                   @Qualifier("swiftRestTemplate") RestTemplate swiftRestTemplate) {
+                                   @Qualifier("swiftRestTemplate") RestTemplate swiftRestTemplate,
+                                   UpoToGpiRequestMapper mapper) {
         this.swiftApiConfig = swiftApiConfig;
         this.swiftRestTemplate = swiftRestTemplate;
+        this.mapper = mapper;
     }
 
     public GpiStatusUpdateResponse updatePaymentStatus(UniversalPaymentObject upo) {
@@ -45,8 +49,9 @@ public class SwiftGpiTrackerService {
     private GpiStatusUpdateResponse executeStatusUpdate(UniversalPaymentObject upo) {
         String url = swiftApiConfig.getStatusUpdateUrl(upo.getUetr());
 
-        // UPO -> GPI request in one call via factory method
-        GpiStatusUpdateRequest request = GpiStatusUpdateRequest.fromUpo(upo, swiftApiConfig.getInstitutionBic());
+        // MapStruct handles all field mapping automatically
+        GpiStatusUpdateRequest request = mapper.toGpiRequest(upo);
+        request.setTrackerInformingParty(swiftApiConfig.getInstitutionBic());
 
         try {
             HttpHeaders headers = buildHeaders();
