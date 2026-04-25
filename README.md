@@ -1,6 +1,6 @@
 # Kafka Event Filter with Rule Engine
 
-A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on rules stored in MongoDB. Supports a complex rule engine with **SpEL expressions**, **field-based matching**, and **composite rules**.
+A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on simple table-based rules stored in MongoDB. Each rule defines up to 7 column-value conditions — if all match, the rule fires.
 
 ## Architecture
 
@@ -9,13 +9,13 @@ A Spring Boot application that consumes Kafka events from all topics (via regex 
 │ Kafka Topics │────▶│  Kafka Event Filter Service   │────▶│ Target Topics│
 │ (events.*)   │     │                              │     │ (filtered)   │
 └─────────────┘     │  ┌────────────────────────┐  │     └──────────────┘
-                    │  │    Rule Engine          │  │
-                    │  │  ┌───────┐ ┌──────────┐│  │     ┌──────────────┐
-                    │  │  │ SpEL  │ │Field Match││  │     │   MongoDB    │
-                    │  │  └───────┘ └──────────┘│  │◀───▶│  (Rules DB)  │
-                    │  │  ┌──────────────────┐  │  │     └──────────────┘
-                    │  │  │   Composite      │  │  │
-                    │  │  └──────────────────┘  │  │
+                    │  │   Table-Based Rules     │  │
+                    │  │  column=value matching   │  │     ┌──────────────┐
+                    │  │  (up to 7 conditions)   │  │◀───▶│   MongoDB    │
+                    │  └────────────────────────┘  │     │  (Rules DB)  │
+                    │  ┌────────────────────────┐  │     └──────────────┘
+                    │  │  JSON → UPO → SWIFT    │  │
+                    │  │  GPI Tracker API        │  │
                     │  └────────────────────────┘  │
                     └──────────────────────────────┘
 ```
@@ -23,10 +23,7 @@ A Spring Boot application that consumes Kafka events from all topics (via regex 
 ## Features
 
 - **Dynamic Topic Subscription**: Listens to all topics matching a configurable regex pattern (default: `events.*`)
-- **Rule Types**:
-  - **SpEL**: Full Spring Expression Language support for complex conditions
-  - **FIELD_MATCH**: Field-level filtering with operators (EQUALS, CONTAINS, REGEX, GREATER_THAN, IN, etc.)
-  - **COMPOSITE**: Combine multiple rules with AND/OR logic
+- **Simple Table-Based Rules**: Each rule defines up to 7 column-value conditions — if all match, the rule fires
 - **Rule Actions**: FORWARD (to filtered topic), DROP (discard), ROUTE (to specific topic)
 - **Priority-based evaluation**: Rules are evaluated in priority order (lower = higher priority)
 - **REST API**: Full CRUD for rules + rule testing endpoint + event publishing
@@ -66,63 +63,59 @@ The app starts on http://localhost:8080.
 
 ### 3. Create Filter Rules
 
-#### SpEL Rule Example
-Filter critical events from payment service:
+Each rule defines up to 7 column-value conditions. An event matches when **all** non-null columns equal the event's field values.
+
+#### Example: Route USD payments from a specific sender
 
 ```bash
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "critical-payment-events",
-    "description": "Forward critical payment service events",
+    "name": "usd-payments-from-deutsche",
+    "description": "Route USD payments from Deutsche Bank",
     "topics": ["events.payments"],
-    "ruleType": "SPEL",
-    "spelExpression": "#event['\''severity'\''] == '\''CRITICAL'\'' && #event['\''source'\''] == '\''payment-service'\''",
-    "action": "FORWARD",
-    "targetTopic": "events.alerts",
+    "column1": "currency",    "value1": "USD",
+    "column2": "senderBic",   "value2": "DEUTDEFF",
+    "column3": "status",      "value3": "ACSP",
+    "action": "ROUTE",
+    "targetTopic": "events.payments.usd-review",
     "priority": 10,
     "enabled": true
   }'
 ```
 
-#### Field Match Rule Example
-Filter events by multiple field conditions:
+#### Example: Drop test events
 
 ```bash
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "high-value-orders",
-    "description": "Route high-value orders for review",
-    "topics": ["events.orders"],
-    "ruleType": "FIELD_MATCH",
-    "fieldConditions": {
-      "amount": {"operator": "GREATER_THAN", "value": 1000},
-      "status": {"operator": "EQUALS", "value": "PENDING"},
-      "country": {"operator": "IN", "value": ["US", "UK", "DE"]}
-    },
-    "action": "ROUTE",
-    "targetTopic": "events.orders.high-value",
-    "priority": 20,
+    "name": "drop-test-events",
+    "description": "Drop events from test environment",
+    "column1": "environment", "value1": "test",
+    "action": "DROP",
+    "priority": 1,
     "enabled": true
   }'
 ```
 
-#### Composite Rule Example
-Combine multiple rules with AND/OR:
+#### Example: Full 7-column rule
 
 ```bash
-# First create child rules, then create composite rule referencing their IDs
 curl -X POST http://localhost:8080/api/rules \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "fraud-detection-composite",
-    "description": "Composite fraud detection rule",
-    "ruleType": "COMPOSITE",
-    "childRuleIds": ["<rule-id-1>", "<rule-id-2>"],
-    "compositeOperator": "AND",
+    "name": "specific-payment-route",
+    "description": "Route specific cross-border payments",
+    "column1": "messageType",  "value1": "MT103",
+    "column2": "currency",     "value2": "EUR",
+    "column3": "senderBic",    "value3": "DEUTDEFF",
+    "column4": "receiverBic",  "value4": "CHASUS33",
+    "column5": "status",       "value5": "ACSP",
+    "column6": "chargeBearer", "value6": "SHA",
+    "column7": "environment",  "value7": "production",
     "action": "ROUTE",
-    "targetTopic": "events.fraud-alerts",
+    "targetTopic": "events.payments.cross-border",
     "priority": 5,
     "enabled": true
   }'
@@ -201,28 +194,21 @@ curl http://localhost:8080/api/events/filtered/rule/<rule-id>
 | GET    | `/api/events/filtered/topic/{topic}`  | Filtered events by topic       |
 | GET    | `/api/events/filtered/rule/{ruleId}`  | Filtered events by rule        |
 
-## Rule Types
+## Rule Matching
 
-### SpEL (Spring Expression Language)
+Each rule has up to 7 column-value pairs. When a Kafka event arrives, the engine checks all enabled rules in priority order. A rule matches if **every** non-null column in the rule equals the corresponding field in the event payload.
 
-Access event fields using `#event['fieldName']` or `#fieldName`:
+| Rule Field | Description |
+|------------|-------------|
+| `column1` / `value1` | First condition: event field name and expected value |
+| `column2` / `value2` | Second condition (optional) |
+| `column3` / `value3` | Third condition (optional) |
+| `column4` / `value4` | Fourth condition (optional) |
+| `column5` / `value5` | Fifth condition (optional) |
+| `column6` / `value6` | Sixth condition (optional) |
+| `column7` / `value7` | Seventh condition (optional) |
 
-```
-#event['severity'] == 'CRITICAL'
-#amount > 1000 && #currency == 'USD'
-#event['tags'].contains('urgent')
-#event['nested']['field'] != null
-```
-
-### FIELD_MATCH
-
-Operators: `EQUALS`, `NOT_EQUALS`, `CONTAINS`, `REGEX`, `GREATER_THAN`, `LESS_THAN`, `IN`, `NOT_IN`, `EXISTS`
-
-Supports dot notation for nested fields: `"user.address.country"`.
-
-### COMPOSITE
-
-Combine rules with `AND` or `OR` logic. Reference child rules by their MongoDB IDs.
+Supports dot notation for nested fields: `"debtor.address.country"`.
 
 ## SWIFT GPI Tracker Integration
 

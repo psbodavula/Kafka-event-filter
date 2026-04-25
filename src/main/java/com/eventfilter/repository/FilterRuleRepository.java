@@ -15,6 +15,4 @@ public interface FilterRuleRepository extends MongoRepository<FilterRule, String
     List<FilterRule> findByTopicsContainingAndEnabledTrueOrderByPriorityAsc(String topic);
 
     Optional<FilterRule> findByName(String name);
-
-    List<FilterRule> findByRuleTypeAndEnabledTrue(com.eventfilter.model.RuleType ruleType);
 }

@@ -1,18 +1,13 @@
 package com.eventfilter.dto;
 
-import com.eventfilter.model.FieldCondition;
-import com.eventfilter.model.LogicalOperator;
 import com.eventfilter.model.RuleAction;
-import com.eventfilter.model.RuleType;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Builder
@@ -27,15 +22,27 @@ public class FilterRuleRequest {
 
     private List<String> topics;
 
-    @NotNull(message = "Rule type is required")
-    private RuleType ruleType;
+    // Column-value conditions (up to 7)
+    private String column1;
+    private String value1;
 
-    private String spelExpression;
+    private String column2;
+    private String value2;
 
-    private Map<String, FieldCondition> fieldConditions;
+    private String column3;
+    private String value3;
 
-    private List<String> childRuleIds;
-    private LogicalOperator compositeOperator;
+    private String column4;
+    private String value4;
+
+    private String column5;
+    private String value5;
+
+    private String column6;
+    private String value6;
+
+    private String column7;
+    private String value7;
 
     @Builder.Default
     private RuleAction action = RuleAction.FORWARD;
