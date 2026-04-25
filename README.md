@@ -32,6 +32,9 @@ A Spring Boot application that consumes Kafka events from all topics (via regex 
 - **REST API**: Full CRUD for rules + rule testing endpoint + event publishing
 - **Audit Trail**: All filtered events are persisted in MongoDB with metadata
 - **Hot-reload**: Rule changes in MongoDB take effect immediately (no restart needed)
+- **JSON to UPO Conversion**: Automatically converts Kafka JSON messages to Universal Payment Objects (SWIFT MT/MX fields)
+- **SWIFT GPI Tracker Integration**: Calls `PUT /swift-apitracker/v5/payments/{uetr}/status` to update payment tracking status
+- **Multi-alias field mapping**: Supports multiple field name aliases for flexible JSON-to-UPO mapping (e.g., `amount` or `instructedAmount`)
 
 ## Prerequisites
 
@@ -221,6 +224,75 @@ Supports dot notation for nested fields: `"user.address.country"`.
 
 Combine rules with `AND` or `OR` logic. Reference child rules by their MongoDB IDs.
 
+## SWIFT GPI Tracker Integration
+
+### How It Works
+
+1. **Kafka Listener** receives a JSON message from any `events.*` topic
+2. **JsonToUpoConverter** maps the JSON fields to a `UniversalPaymentObject` (SWIFT MT/MX format)
+3. If the UPO contains a **UETR** (Unique End-to-End Transaction Reference), the **SwiftGpiTrackerService** calls:
+   ```
+   PUT /swift-apitracker/v5/payments/{uetr}/status
+   ```
+4. The status update result is logged (and can be stored for audit)
+
+### UPO Fields (Universal Payment Object)
+
+| Field                      | JSON Aliases                                  | Description                         |
+|---------------------------|-----------------------------------------------|-------------------------------------|
+| `uetr`                    | `uetr`                                        | SWIFT GPI tracking ID (UUID)        |
+| `transactionReference`    | `transactionReference`, `txnRef`, `field20`   | MT103 field 20                      |
+| `instructedAmount`        | `instructedAmount`, `amount`                  | Payment amount                      |
+| `instructedCurrency`      | `instructedCurrency`, `currency`, `ccy`       | ISO 4217 currency                   |
+| `debtorAgentBic`          | `debtorAgentBic`, `senderBic`                 | Ordering institution BIC            |
+| `creditorAgentBic`        | `creditorAgentBic`, `receiverBic`             | Beneficiary institution BIC         |
+| `debtorName`              | `debtorName`, `originatorName`                | Originator name                     |
+| `creditorName`            | `creditorName`, `beneficiaryName`             | Beneficiary name                    |
+| `valueDate`               | `valueDate`, `valueDt`                        | Settlement date (YYYY-MM-DD)        |
+| `transactionStatus`       | `transactionStatus`, `status`                 | GPI status (ACCC, ACSP, RJCT, etc.) |
+
+### Example: Payment Event with GPI Tracking
+
+```bash
+curl -X POST http://localhost:8080/api/events/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "events.payments",
+    "key": "payment-456",
+    "payload": {
+      "uetr": "97ed4827-7b6f-4491-a06f-b548d5a7512d",
+      "transactionReference": "REF20250425001",
+      "messageType": "MT103",
+      "amount": 50000,
+      "currency": "USD",
+      "senderBic": "DEUTDEFF",
+      "receiverBic": "CHASUS33",
+      "debtorName": "Acme Corp",
+      "creditorName": "Global Trading Ltd",
+      "beneficiaryAccount": "US64SVBK12345678901234",
+      "valueDate": "2025-04-25",
+      "status": "ACSP",
+      "chargeBearer": "SHA",
+      "remittanceInfo": "Invoice INV-2025-001"
+    }
+  }'
+```
+
+### SWIFT API Configuration
+
+Set `SWIFT_API_ENABLED=true` and provide your credentials to enable live API calls:
+
+```bash
+export SWIFT_API_ENABLED=true
+export SWIFT_API_BASE_URL=https://sandbox.swift.com   # or https://api.swift.com for production
+export SWIFT_API_KEY=your-api-key
+export SWIFT_CLIENT_ID=your-client-id
+export SWIFT_CLIENT_SECRET=your-client-secret
+export SWIFT_INSTITUTION_BIC=YOURBICXXXX
+```
+
+When `SWIFT_API_ENABLED=false` (default), the service runs in **simulation mode** — it logs the request and returns a simulated success response.
+
 ## Configuration
 
 | Property                        | Default                | Description                      |
@@ -229,6 +301,10 @@ Combine rules with `AND` or `OR` logic. Reference child rules by their MongoDB I
 | `spring.data.mongodb.uri`       | `mongodb://localhost:27017/event_filter_db` | MongoDB connection |
 | `kafka.topic-pattern`           | `events.*`             | Regex pattern for topic subscription |
 | `spring.kafka.consumer.group-id`| `event-filter-group`   | Kafka consumer group ID          |
+| `swift.api.base-url`            | `https://sandbox.swift.com` | SWIFT API base URL          |
+| `swift.api.api-key`             | *(empty)*              | SWIFT API key / Bearer token     |
+| `swift.api.institution-bic`     | *(empty)*              | Your institution's BIC           |
+| `swift.api.enabled`             | `false`                | Enable live SWIFT API calls      |
 
 ## Monitoring
 

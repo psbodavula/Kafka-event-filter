@@ -1,5 +1,9 @@
 package com.eventfilter.service;
 
+import com.eventfilter.converter.JsonToUpoConverter;
+import com.eventfilter.model.upo.UniversalPaymentObject;
+import com.eventfilter.swift.model.GpiStatusUpdateResponse;
+import com.eventfilter.swift.service.SwiftGpiTrackerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -17,12 +21,9 @@ import java.util.Map;
 public class KafkaEventListener {
 
     private final EventProcessingService eventProcessingService;
+    private final JsonToUpoConverter jsonToUpoConverter;
+    private final SwiftGpiTrackerService swiftGpiTrackerService;
 
-    /**
-     * Listens to all event topics using a regex pattern.
-     * The pattern "events.*" matches any topic starting with "events".
-     * You can modify this pattern to match your naming convention.
-     */
     @KafkaListener(topicPattern = "${kafka.topic-pattern:events.*}", groupId = "${spring.kafka.consumer.group-id:event-filter-group}")
     public void onEvent(ConsumerRecord<String, Map<String, Object>> record) {
         String topic = record.topic();
@@ -33,7 +34,27 @@ public class KafkaEventListener {
         log.debug("Event payload: {}", payload);
 
         try {
+            // 1. Apply filter rules
             eventProcessingService.processEvent(topic, payload, headers);
+
+            // 2. Convert JSON to UPO and call SWIFT GPI Tracker
+            UniversalPaymentObject upo = jsonToUpoConverter.convert(payload);
+
+            if (upo.getUetr() != null && !upo.getUetr().isBlank()) {
+                log.info("UPO converted for UETR: {}, calling SWIFT GPI Tracker", upo.getUetr());
+                GpiStatusUpdateResponse gpiResponse = swiftGpiTrackerService.updatePaymentStatus(upo);
+
+                if (gpiResponse.isSuccess()) {
+                    log.info("GPI Tracker updated successfully for UETR: {}, confirmation: {}",
+                            upo.getUetr(), gpiResponse.getConfirmationNumber());
+                } else {
+                    log.warn("GPI Tracker update failed for UETR: {}: {}",
+                            upo.getUetr(), gpiResponse.getErrorMessage());
+                }
+            } else {
+                log.debug("No UETR in payload, skipping GPI tracker update for topic '{}'", topic);
+            }
+
         } catch (Exception e) {
             log.error("Error processing event from topic '{}': {}", topic, e.getMessage(), e);
         }

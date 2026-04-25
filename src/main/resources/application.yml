@@ -19,6 +19,19 @@ spring:
 kafka:
   topic-pattern: ${KAFKA_TOPIC_PATTERN:events.*}
 
+# SWIFT GPI Tracker API Configuration
+swift:
+  api:
+    base-url: ${SWIFT_API_BASE_URL:https://sandbox.swift.com}
+    tracker-path: /swift-apitracker/v5
+    api-key: ${SWIFT_API_KEY:}
+    client-id: ${SWIFT_CLIENT_ID:}
+    client-secret: ${SWIFT_CLIENT_SECRET:}
+    institution-bic: ${SWIFT_INSTITUTION_BIC:}
+    connect-timeout: 10000
+    read-timeout: 30000
+    enabled: ${SWIFT_API_ENABLED:false}
+
 management:
   endpoints:
     web:
