@@ -1,181 +1,105 @@
 package com.eventfilter.model.upo;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UniversalPaymentObject {
 
-    /**
-     * Unique End-to-End Transaction Reference (UUID format).
-     * Core identifier for SWIFT GPI tracking.
-     */
     private String uetr;
 
-    /**
-     * Transaction reference number (e.g., MT103 field 20).
-     */
+    @JsonAlias({"txnRef", "field20"})
     private String transactionReference;
 
-    /**
-     * Sender's reference (field 20 of the original message).
-     */
+    @JsonAlias("sndRef")
     private String senderReference;
 
-    /**
-     * Message type: MT103, MT202, pacs.008, pacs.009, etc.
-     */
+    @JsonAlias("msgType")
     private String messageType;
 
-    // --- Financial Details ---
-
-    /**
-     * Instructed amount in the original currency.
-     */
+    @JsonAlias("amount")
     private BigDecimal instructedAmount;
 
-    /**
-     * Currency of the instructed amount (ISO 4217).
-     */
+    @JsonAlias({"currency", "ccy"})
     private String instructedCurrency;
 
-    /**
-     * Interbank settlement amount.
-     */
+    @JsonAlias("settlementAmount")
     private BigDecimal interbankSettlementAmount;
 
-    /**
-     * Currency of the interbank settlement (ISO 4217).
-     */
+    @JsonAlias("settlementCurrency")
     private String interbankSettlementCurrency;
 
-    /**
-     * Exchange rate applied (if currency conversion occurred).
-     */
+    @JsonAlias("xchgRate")
     private BigDecimal exchangeRate;
 
-    // --- Parties ---
-
-    /**
-     * Ordering institution BIC (sender bank).
-     */
+    @JsonAlias({"senderBic", "orderingInstitution"})
     private String debtorAgentBic;
 
-    /**
-     * Ordering institution name.
-     */
+    @JsonAlias("senderName")
     private String debtorAgentName;
 
-    /**
-     * Debtor (originator) name.
-     */
+    @JsonAlias("originatorName")
     private String debtorName;
 
-    /**
-     * Debtor account (IBAN or account number).
-     */
+    @JsonAlias("originatorAccount")
     private String debtorAccount;
 
-    /**
-     * Beneficiary institution BIC (receiver bank).
-     */
+    @JsonAlias({"receiverBic", "beneficiaryInstitution"})
     private String creditorAgentBic;
 
-    /**
-     * Beneficiary institution name.
-     */
+    @JsonAlias("receiverName")
     private String creditorAgentName;
 
-    /**
-     * Creditor (beneficiary) name.
-     */
+    @JsonAlias("beneficiaryName")
     private String creditorName;
 
-    /**
-     * Creditor account (IBAN or account number).
-     */
+    @JsonAlias("beneficiaryAccount")
     private String creditorAccount;
 
-    // --- Intermediaries ---
-
-    /**
-     * Intermediary agent BIC (correspondent bank).
-     */
+    @JsonAlias("correspondentBic")
     private String intermediaryAgentBic;
 
-    /**
-     * Instructing agent BIC.
-     */
     private String instructingAgentBic;
 
-    // --- Dates ---
-
-    /**
-     * Value date / settlement date.
-     */
+    @JsonAlias("valueDt")
     private LocalDate valueDate;
 
-    /**
-     * Creation date/time of the payment instruction.
-     */
+    @JsonAlias("createdAt")
     private Instant creationDateTime;
 
-    // --- Payment Details ---
-
-    /**
-     * Charge bearer: SHA, BEN, OUR.
-     */
+    @JsonAlias("chargeBrr")
     private String chargeBearer;
 
-    /**
-     * Total charges amount.
-     */
+    @JsonAlias("charges")
     private BigDecimal chargesAmount;
 
-    /**
-     * Charges currency.
-     */
     private String chargesCurrency;
 
-    /**
-     * Remittance information / payment details.
-     */
+    @JsonAlias({"remittanceInfo", "paymentDetails"})
     private String remittanceInformation;
 
-    /**
-     * Purpose of payment code.
-     */
     private String purposeCode;
 
-    // --- GPI Tracking ---
-
-    /**
-     * Current transaction status for GPI tracking.
-     * Values: ACCC, ACSP, ACSC, RJCT, PDNG, etc.
-     */
+    @JsonAlias("status")
     private String transactionStatus;
 
-    /**
-     * Status reason code (if rejected or returned).
-     */
+    @JsonAlias("reasonCode")
     private String statusReasonCode;
 
-    /**
-     * Timestamp of the last status update.
-     */
+    @JsonAlias("updatedAt")
     private Instant lastUpdateTime;
 
-    /**
-     * Tracker confirmation number from SWIFT.
-     */
     private String confirmationNumber;
 }

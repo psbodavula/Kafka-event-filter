@@ -4,7 +4,6 @@ import com.eventfilter.model.upo.UniversalPaymentObject;
 import com.eventfilter.swift.config.SwiftApiConfig;
 import com.eventfilter.swift.model.GpiStatusUpdateRequest;
 import com.eventfilter.swift.model.GpiStatusUpdateResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
@@ -12,8 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
-
-import java.time.Instant;
 
 @Slf4j
 @Service
@@ -28,10 +25,6 @@ public class SwiftGpiTrackerService {
         this.swiftRestTemplate = swiftRestTemplate;
     }
 
-    /**
-     * Update the GPI tracker status for a payment identified by its UETR.
-     * Calls PUT /swift-apitracker/v5/payments/{uetr}/status
-     */
     public GpiStatusUpdateResponse updatePaymentStatus(UniversalPaymentObject upo) {
         if (upo.getUetr() == null || upo.getUetr().isBlank()) {
             log.error("Cannot update GPI tracker: UETR is missing from UPO");
@@ -51,7 +44,9 @@ public class SwiftGpiTrackerService {
 
     private GpiStatusUpdateResponse executeStatusUpdate(UniversalPaymentObject upo) {
         String url = swiftApiConfig.getStatusUpdateUrl(upo.getUetr());
-        GpiStatusUpdateRequest request = buildStatusUpdateRequest(upo);
+
+        // UPO -> GPI request in one call via factory method
+        GpiStatusUpdateRequest request = GpiStatusUpdateRequest.fromUpo(upo, swiftApiConfig.getInstitutionBic());
 
         try {
             HttpHeaders headers = buildHeaders();
@@ -98,49 +93,6 @@ public class SwiftGpiTrackerService {
                     .errorMessage("Unexpected error: " + e.getMessage())
                     .build();
         }
-    }
-
-    private GpiStatusUpdateRequest buildStatusUpdateRequest(UniversalPaymentObject upo) {
-        GpiStatusUpdateRequest.GpiStatusUpdateRequestBuilder builder = GpiStatusUpdateRequest.builder()
-                .from(upo.getDebtorAgentBic())
-                .to(upo.getCreditorAgentBic())
-                .originator(upo.getDebtorName())
-                .transactionStatus(upo.getTransactionStatus() != null ? upo.getTransactionStatus() : "ACSP")
-                .trackerInformingParty(swiftApiConfig.getInstitutionBic())
-                .instructionIdentification(upo.getTransactionReference())
-                .lastUpdateTime(Instant.now());
-
-        if (upo.getInterbankSettlementAmount() != null) {
-            builder.interbankSettlementAmount(upo.getInterbankSettlementAmount());
-            builder.interbankSettlementCurrency(upo.getInterbankSettlementCurrency());
-        }
-
-        if (upo.getValueDate() != null) {
-            builder.interbankSettlementDate(upo.getValueDate().toString());
-        }
-
-        if (upo.getInstructedAmount() != null) {
-            builder.instructedAmount(GpiStatusUpdateRequest.InstructedAmount.builder()
-                    .amount(upo.getInstructedAmount())
-                    .currency(upo.getInstructedCurrency())
-                    .build());
-        }
-
-        if (upo.getChargesAmount() != null) {
-            builder.chargeAmount(GpiStatusUpdateRequest.ChargeAmount.builder()
-                    .amount(upo.getChargesAmount())
-                    .currency(upo.getChargesCurrency())
-                    .build());
-            builder.chargeType(upo.getChargeBearer());
-        }
-
-        if (upo.getStatusReasonCode() != null) {
-            builder.transactionStatusReason(GpiStatusUpdateRequest.TransactionStatusReason.builder()
-                    .reasonCode(upo.getStatusReasonCode())
-                    .build());
-        }
-
-        return builder.build();
     }
 
     private HttpHeaders buildHeaders() {
