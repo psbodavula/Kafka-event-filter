@@ -1,7 +1,6 @@
 package com.eventfilter.service;
 
-import com.eventfilter.converter.JsonToUpoConverter;
-import com.eventfilter.model.upo.UniversalPaymentObject;
+import com.eventfilter.converter.mapper.DataDrivenGpiMapper;
 import com.eventfilter.swift.model.GpiStatusUpdateResponse;
 import com.eventfilter.swift.service.SwiftGpiTrackerService;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +16,8 @@ import java.util.Map;
 
 /**
  * Only receives messages that already passed the RecordFilterStrategy (rule matching).
- * This listener focuses on: audit logging, UPO conversion, and SWIFT GPI tracker updates.
+ * This listener focuses on: audit logging, event processing, and SWIFT GPI tracker updates
+ * via the data-driven mapping pipeline.
  */
 @Slf4j
 @Service
@@ -25,7 +25,7 @@ import java.util.Map;
 public class KafkaEventListener {
 
     private final EventProcessingService eventProcessingService;
-    private final JsonToUpoConverter jsonToUpoConverter;
+    private final DataDrivenGpiMapper dataDrivenGpiMapper;
     private final SwiftGpiTrackerService swiftGpiTrackerService;
 
     @KafkaListener(topicPattern = "${kafka.topic-pattern:events.*}", groupId = "${spring.kafka.consumer.group-id:event-filter-group}")
@@ -40,19 +40,19 @@ public class KafkaEventListener {
             // 1. Execute rule actions (forward/route/drop + audit trail)
             eventProcessingService.processEvent(topic, payload, headers);
 
-            // 2. Convert JSON to UPO and call SWIFT GPI Tracker
-            UniversalPaymentObject upo = jsonToUpoConverter.convert(payload);
+            // 2. Use data-driven mapper to check for UETR and call SWIFT GPI Tracker
+            String uetr = dataDrivenGpiMapper.extractUetr(payload);
 
-            if (upo.getUetr() != null && !upo.getUetr().isBlank()) {
-                log.info("UPO converted for UETR: {}, calling SWIFT GPI Tracker", upo.getUetr());
-                GpiStatusUpdateResponse gpiResponse = swiftGpiTrackerService.updatePaymentStatus(upo);
+            if (uetr != null && !uetr.isBlank()) {
+                log.info("UETR found: {}, invoking data-driven GPI Tracker pipeline", uetr);
+                GpiStatusUpdateResponse gpiResponse = swiftGpiTrackerService.updatePaymentStatusDataDriven(payload);
 
                 if (gpiResponse.isSuccess()) {
                     log.info("GPI Tracker updated for UETR: {}, confirmation: {}",
-                            upo.getUetr(), gpiResponse.getConfirmationNumber());
+                            uetr, gpiResponse.getConfirmationNumber());
                 } else {
                     log.warn("GPI Tracker update failed for UETR: {}: {}",
-                            upo.getUetr(), gpiResponse.getErrorMessage());
+                            uetr, gpiResponse.getErrorMessage());
                 }
             } else {
                 log.debug("No UETR in payload, skipping GPI tracker update for topic '{}'", topic);
