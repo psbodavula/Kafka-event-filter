@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Filter rule with named condition fields.
- * The mapping from field names to event payload paths is stored in the column_mappings collection.
- * An event matches when ALL non-null fields equal the event's corresponding nested values.
+ * Self-contained filter rule with up to 3 column-value conditions.
+ * Each column is a payload path (e.g. "wfEvtInf/evtApplid") and each value is the expected match.
+ * An event matches when ALL non-null column/value pairs match the event's nested payload.
  */
 @Data
 @Builder
@@ -40,13 +40,16 @@ public class FilterRule {
     /** Topics this rule applies to. Empty/null means all topics. */
     private List<String> topics;
 
-    // --- Named conditions (field-to-path mapping comes from column_mappings DB) ---
+    // --- Column (payload path) / Value pairs ---
 
-    private String evtApplid;
+    private String column1;
+    private String value1;
 
-    private String evtNm;
+    private String column2;
+    private String value2;
 
-    private String srcChnl;
+    private String column3;
+    private String value3;
 
     /** Action to take when rule matches: FORWARD, DROP, ROUTE */
     @Builder.Default
@@ -69,24 +72,19 @@ public class FilterRule {
     private Instant updatedAt;
 
     /**
-     * Returns non-null conditions as a map of (payload path → expected value),
-     * using the column mapping lookup from the database.
-     *
-     * @param columnMappings map of columnName → payloadPath from column_mappings collection
+     * Returns all non-null conditions as a map of (payload path → expected value).
      */
-    public Map<String, String> getConditions(Map<String, String> columnMappings) {
+    public Map<String, String> getConditions() {
         Map<String, String> conditions = new LinkedHashMap<>();
-        addIfPresent(conditions, "evtApplid", evtApplid, columnMappings);
-        addIfPresent(conditions, "evtNm", evtNm, columnMappings);
-        addIfPresent(conditions, "srcChnl", srcChnl, columnMappings);
+        addIfPresent(conditions, column1, value1);
+        addIfPresent(conditions, column2, value2);
+        addIfPresent(conditions, column3, value3);
         return conditions;
     }
 
-    private void addIfPresent(Map<String, String> conditions, String columnName,
-                               String value, Map<String, String> columnMappings) {
-        if (value != null && !value.isBlank()) {
-            String payloadPath = columnMappings.getOrDefault(columnName, columnName);
-            conditions.put(payloadPath, value);
+    private void addIfPresent(Map<String, String> map, String column, String value) {
+        if (column != null && !column.isBlank()) {
+            map.put(column, value);
         }
     }
 }

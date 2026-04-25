@@ -11,21 +11,16 @@ import java.util.Map;
 public class RuleEngine {
 
     /**
-     * Evaluate a rule against an event payload using column mappings from the database.
+     * Evaluate a rule against an event payload.
+     * Each rule's column IS the payload path (e.g. "wfEvtInf/evtApplid").
      * A rule matches when ALL its conditions equal the event's nested field values.
-     *
-     * @param rule           the filter rule
-     * @param eventPayload   the Kafka event payload
-     * @param topic          the Kafka topic
-     * @param columnMappings map of columnName → payloadPath from column_mappings collection
      */
-    public boolean evaluate(FilterRule rule, Map<String, Object> eventPayload,
-                            String topic, Map<String, String> columnMappings) {
+    public boolean evaluate(FilterRule rule, Map<String, Object> eventPayload, String topic) {
         if (!isRuleApplicable(rule, topic)) {
             return false;
         }
 
-        Map<String, String> conditions = rule.getConditions(columnMappings);
+        Map<String, String> conditions = rule.getConditions();
 
         if (conditions.isEmpty()) {
             return true;

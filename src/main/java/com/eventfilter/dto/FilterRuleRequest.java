@@ -22,14 +22,15 @@ public class FilterRuleRequest {
 
     private List<String> topics;
 
-    /** Matches wfEvtInf/evtApplid */
-    private String evtApplid;
+    // Column (payload path) / Value pairs
+    private String column1;
+    private String value1;
 
-    /** Matches wfEvtInf/evtNm */
-    private String evtNm;
+    private String column2;
+    private String value2;
 
-    /** Matches wfPmtOrdrPrcg/srcChnl */
-    private String srcChnl;
+    private String column3;
+    private String value3;
 
     @Builder.Default
     private RuleAction action = RuleAction.FORWARD;

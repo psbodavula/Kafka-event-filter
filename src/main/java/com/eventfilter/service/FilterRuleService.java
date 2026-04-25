@@ -32,9 +32,12 @@ public class FilterRuleService {
         existing.setName(rule.getName());
         existing.setDescription(rule.getDescription());
         existing.setTopics(rule.getTopics());
-        existing.setEvtApplid(rule.getEvtApplid());
-        existing.setEvtNm(rule.getEvtNm());
-        existing.setSrcChnl(rule.getSrcChnl());
+        existing.setColumn1(rule.getColumn1());
+        existing.setValue1(rule.getValue1());
+        existing.setColumn2(rule.getColumn2());
+        existing.setValue2(rule.getValue2());
+        existing.setColumn3(rule.getColumn3());
+        existing.setValue3(rule.getValue3());
         existing.setAction(rule.getAction());
         existing.setTargetTopic(rule.getTargetTopic());
         existing.setPriority(rule.getPriority());

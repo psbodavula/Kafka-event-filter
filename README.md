@@ -1,6 +1,6 @@
 # Kafka Event Filter with Rule Engine
 
-A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on rules stored in MongoDB. Rules match on named fields (`evtApplid`, `evtNm`, `srcChnl`) mapped to nested event payload paths (`wfEvtInf/evtApplid`, `wfEvtInf/evtNm`, `wfPmtOrdrPrcg/srcChnl`). Filtering happens **before the listener** via `RecordFilterStrategy`.
+A Spring Boot application that consumes Kafka events from all topics (via regex pattern matching) and filters them based on rules stored in MongoDB. Each rule carries its own payload paths (e.g. `wfEvtInf/evtApplid`, `wfPmtOrdrPrcg/srcChnl`) as column/value pairs — self-contained, no separate mapping table. Filtering happens **before the listener** via `RecordFilterStrategy`.
 
 ## Architecture
 
@@ -63,13 +63,7 @@ The app starts on http://localhost:8080.
 
 ### 3. Create Filter Rules
 
-Each rule defines conditions on named fields. An event matches when **all** non-null conditions equal the event's nested payload values.
-
-| Rule Field    | Event Payload Path        | Description              |
-|---------------|---------------------------|--------------------------|
-| `evtApplid`   | `wfEvtInf/evtApplid`      | Event application ID     |
-| `evtNm`       | `wfEvtInf/evtNm`          | Event name               |
-| `srcChnl`     | `wfPmtOrdrPrcg/srcChnl`   | Source channel            |
+Each rule has up to 3 column/value pairs. The **column** is the payload path (e.g. `wfEvtInf/evtApplid`) and the **value** is the expected match. An event matches when **all** non-null pairs match.
 
 #### Example: Filter by application ID and event name
 
@@ -80,8 +74,8 @@ curl -X POST http://localhost:8080/api/rules \
     "name": "payment-initiated-swift",
     "description": "Route SWIFT payment initiated events",
     "topics": ["events.payments"],
-    "evtApplid": "PAYMENTS",
-    "evtNm": "PaymentInitiated",
+    "column1": "wfEvtInf/evtApplid",    "value1": "PAYMENTS",
+    "column2": "wfEvtInf/evtNm",        "value2": "PaymentInitiated",
     "action": "ROUTE",
     "targetTopic": "events.payments.swift-initiated",
     "priority": 10,
@@ -97,7 +91,7 @@ curl -X POST http://localhost:8080/api/rules \
   -d '{
     "name": "drop-internal-channel",
     "description": "Drop events from internal channel",
-    "srcChnl": "INTERNAL",
+    "column1": "wfPmtOrdrPrcg/srcChnl", "value1": "INTERNAL",
     "action": "DROP",
     "priority": 1,
     "enabled": true
@@ -112,9 +106,9 @@ curl -X POST http://localhost:8080/api/rules \
   -d '{
     "name": "swift-fin-payments",
     "description": "Route FIN payments from SWIFT channel",
-    "evtApplid": "FIN",
-    "evtNm": "PaymentCompleted",
-    "srcChnl": "SWIFT",
+    "column1": "wfEvtInf/evtApplid",    "value1": "FIN",
+    "column2": "wfEvtInf/evtNm",        "value2": "PaymentCompleted",
+    "column3": "wfPmtOrdrPrcg/srcChnl", "value3": "SWIFT",
     "action": "ROUTE",
     "targetTopic": "events.payments.fin-completed",
     "priority": 5,
@@ -195,60 +189,20 @@ curl http://localhost:8080/api/events/filtered/rule/<rule-id>
 | GET    | `/api/events/filtered/topic/{topic}`  | Filtered events by topic       |
 | GET    | `/api/events/filtered/rule/{ruleId}`  | Filtered events by rule        |
 
-### Column Mappings API
-
-| Method | Endpoint                | Description                          |
-|--------|-------------------------|--------------------------------------|
-| POST   | `/api/mappings`         | Create a new column-to-path mapping  |
-| GET    | `/api/mappings`         | List all column mappings             |
-| PUT    | `/api/mappings/{id}`    | Update a mapping                     |
-| DELETE | `/api/mappings/{id}`    | Delete a mapping                     |
-| GET    | `/api/mappings/lookup`  | Get columnName → payloadPath map     |
-
-## Column Mappings (DB-Driven)
-
-The mapping from rule column names to event payload paths is stored in the `column_mappings` MongoDB collection — **no hardcoded paths in Java code**.
-
-### Setup Mappings
-
-```bash
-# Map evtApplid → wfEvtInf/evtApplid
-curl -X POST http://localhost:8080/api/mappings \
-  -H "Content-Type: application/json" \
-  -d '{"columnName": "evtApplid", "payloadPath": "wfEvtInf/evtApplid", "description": "Event application ID"}'
-
-# Map evtNm → wfEvtInf/evtNm
-curl -X POST http://localhost:8080/api/mappings \
-  -H "Content-Type: application/json" \
-  -d '{"columnName": "evtNm", "payloadPath": "wfEvtInf/evtNm", "description": "Event name"}'
-
-# Map srcChnl → wfPmtOrdrPrcg/srcChnl
-curl -X POST http://localhost:8080/api/mappings \
-  -H "Content-Type: application/json" \
-  -d '{"columnName": "srcChnl", "payloadPath": "wfPmtOrdrPrcg/srcChnl", "description": "Source channel"}'
-```
-
-### Verify Mappings
-
-```bash
-curl http://localhost:8080/api/mappings/lookup
-# Returns: {"evtApplid": "wfEvtInf/evtApplid", "evtNm": "wfEvtInf/evtNm", "srcChnl": "wfPmtOrdrPrcg/srcChnl"}
-```
-
 ## Rule Matching
 
-When a Kafka event arrives, the `RecordFilterStrategy` checks all enabled rules **before the listener** — unmatched messages are silently discarded.
+Each rule is self-contained — the **column IS the payload path** (e.g. `wfEvtInf/evtApplid`). No separate mapping table needed.
 
 ```
-Kafka Poll → RecordFilterStrategy (load mappings + rules from DB) → discard if no match
-                                                                   → @KafkaListener if matched → UPO → GPI Tracker
+Kafka Poll → RecordFilterStrategy (load rules from DB) → discard if no match
+                                                        → @KafkaListener if matched → UPO → GPI Tracker
 ```
 
 The rule engine:
-1. Loads column mappings from `column_mappings` collection
-2. For each rule, resolves the payload path for each non-null field using the mapping
-3. Checks if the event's nested value at that path equals the rule's expected value
-4. A rule matches when ALL non-null fields match
+1. For each rule, reads column1/value1, column2/value2, column3/value3
+2. Resolves nested paths using `/` separator (e.g. `wfEvtInf/evtApplid` → `payload["wfEvtInf"]["evtApplid"]`)
+3. Checks if each resolved value equals the rule's expected value
+4. A rule matches when ALL non-null column/value pairs match
 
 ## SWIFT GPI Tracker Integration
 
