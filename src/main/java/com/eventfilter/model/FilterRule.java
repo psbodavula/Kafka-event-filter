@@ -17,12 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Table-based filter rule with named conditions.
- * Matches event payload paths:
- *   evtApplid  → wfEvtInf/evtApplid
- *   evtNm      → wfEvtInf/evtNm
- *   srcChnl    → wfPmtOrdrPrcg/srcChnl
- *
+ * Filter rule with named condition fields.
+ * The mapping from field names to event payload paths is stored in the column_mappings collection.
  * An event matches when ALL non-null fields equal the event's corresponding nested values.
  */
 @Data
@@ -44,15 +40,12 @@ public class FilterRule {
     /** Topics this rule applies to. Empty/null means all topics. */
     private List<String> topics;
 
-    // --- Named conditions mapped to event payload paths ---
+    // --- Named conditions (field-to-path mapping comes from column_mappings DB) ---
 
-    /** Matches wfEvtInf/evtApplid in the event payload */
     private String evtApplid;
 
-    /** Matches wfEvtInf/evtNm in the event payload */
     private String evtNm;
 
-    /** Matches wfPmtOrdrPrcg/srcChnl in the event payload */
     private String srcChnl;
 
     /** Action to take when rule matches: FORWARD, DROP, ROUTE */
@@ -76,19 +69,24 @@ public class FilterRule {
     private Instant updatedAt;
 
     /**
-     * Returns all non-null conditions as a map of (payload path → expected value).
+     * Returns non-null conditions as a map of (payload path → expected value),
+     * using the column mapping lookup from the database.
+     *
+     * @param columnMappings map of columnName → payloadPath from column_mappings collection
      */
-    public Map<String, String> getConditions() {
+    public Map<String, String> getConditions(Map<String, String> columnMappings) {
         Map<String, String> conditions = new LinkedHashMap<>();
-        if (evtApplid != null && !evtApplid.isBlank()) {
-            conditions.put("wfEvtInf/evtApplid", evtApplid);
-        }
-        if (evtNm != null && !evtNm.isBlank()) {
-            conditions.put("wfEvtInf/evtNm", evtNm);
-        }
-        if (srcChnl != null && !srcChnl.isBlank()) {
-            conditions.put("wfPmtOrdrPrcg/srcChnl", srcChnl);
-        }
+        addIfPresent(conditions, "evtApplid", evtApplid, columnMappings);
+        addIfPresent(conditions, "evtNm", evtNm, columnMappings);
+        addIfPresent(conditions, "srcChnl", srcChnl, columnMappings);
         return conditions;
+    }
+
+    private void addIfPresent(Map<String, String> conditions, String columnName,
+                               String value, Map<String, String> columnMappings) {
+        if (value != null && !value.isBlank()) {
+            String payloadPath = columnMappings.getOrDefault(columnName, columnName);
+            conditions.put(payloadPath, value);
+        }
     }
 }

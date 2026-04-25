@@ -3,6 +3,7 @@ package com.eventfilter.config;
 import com.eventfilter.engine.RuleEngine;
 import com.eventfilter.model.FilterRule;
 import com.eventfilter.repository.FilterRuleRepository;
+import com.eventfilter.service.ColumnMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -47,12 +48,13 @@ public class KafkaConsumerConfig {
     /**
      * Container factory with RecordFilterStrategy.
      * Messages that don't match ANY enabled rule are discarded BEFORE reaching the listener.
-     * Return true = DISCARD, return false = KEEP.
+     * Column-to-path mappings are loaded from the column_mappings collection in MongoDB.
      */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Map<String, Object>> kafkaListenerContainerFactory(
             FilterRuleRepository ruleRepository,
-            RuleEngine ruleEngine) {
+            RuleEngine ruleEngine,
+            ColumnMappingService columnMappingService) {
 
         ConcurrentKafkaListenerContainerFactory<String, Map<String, Object>> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
@@ -64,16 +66,17 @@ public class KafkaConsumerConfig {
             String topic = record.topic();
 
             List<FilterRule> enabledRules = ruleRepository.findByEnabledTrueOrderByPriorityAsc();
+            Map<String, String> columnMappings = columnMappingService.getMappingLookup();
 
             for (FilterRule rule : enabledRules) {
-                if (ruleEngine.evaluate(rule, payload, topic)) {
+                if (ruleEngine.evaluate(rule, payload, topic, columnMappings)) {
                     log.debug("Record on topic '{}' matched rule '{}' — keeping", topic, rule.getName());
-                    return false; // KEEP — matched a rule
+                    return false; // KEEP
                 }
             }
 
             log.debug("Record on topic '{}' matched no rules — discarding before listener", topic);
-            return true; // DISCARD — no rules matched
+            return true; // DISCARD
         });
 
         return factory;

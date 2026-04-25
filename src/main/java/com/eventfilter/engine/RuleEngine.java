@@ -11,28 +11,34 @@ import java.util.Map;
 public class RuleEngine {
 
     /**
-     * Evaluate a rule against an event payload.
-     * A rule matches when ALL its column-value conditions equal the event's field values.
+     * Evaluate a rule against an event payload using column mappings from the database.
+     * A rule matches when ALL its conditions equal the event's nested field values.
+     *
+     * @param rule           the filter rule
+     * @param eventPayload   the Kafka event payload
+     * @param topic          the Kafka topic
+     * @param columnMappings map of columnName → payloadPath from column_mappings collection
      */
-    public boolean evaluate(FilterRule rule, Map<String, Object> eventPayload, String topic) {
+    public boolean evaluate(FilterRule rule, Map<String, Object> eventPayload,
+                            String topic, Map<String, String> columnMappings) {
         if (!isRuleApplicable(rule, topic)) {
             return false;
         }
 
-        Map<String, String> conditions = rule.getConditions();
+        Map<String, String> conditions = rule.getConditions(columnMappings);
 
         if (conditions.isEmpty()) {
             return true;
         }
 
         for (Map.Entry<String, String> entry : conditions.entrySet()) {
-            String column = entry.getKey();
+            String payloadPath = entry.getKey();
             String expectedValue = entry.getValue();
-            Object actualValue = resolveFieldValue(eventPayload, column);
+            Object actualValue = resolveFieldValue(eventPayload, payloadPath);
 
             if (actualValue == null || !actualValue.toString().equals(expectedValue)) {
-                log.debug("Rule '{}': column '{}' mismatch (expected='{}', actual='{}')",
-                        rule.getName(), column, expectedValue, actualValue);
+                log.debug("Rule '{}': path '{}' mismatch (expected='{}', actual='{}')",
+                        rule.getName(), payloadPath, expectedValue, actualValue);
                 return false;
             }
         }

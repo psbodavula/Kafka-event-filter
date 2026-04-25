@@ -18,20 +18,23 @@ public class RuleEvaluationService {
 
     private final FilterRuleRepository ruleRepository;
     private final RuleEngine ruleEngine;
+    private final ColumnMappingService columnMappingService;
 
     public List<FilterRule> findMatchingRules(Map<String, Object> eventPayload, String topic) {
         List<FilterRule> applicableRules = getApplicableRules(topic);
+        Map<String, String> columnMappings = columnMappingService.getMappingLookup();
 
         return applicableRules.stream()
-                .filter(rule -> ruleEngine.evaluate(rule, eventPayload, topic))
+                .filter(rule -> ruleEngine.evaluate(rule, eventPayload, topic, columnMappings))
                 .toList();
     }
 
     public Optional<FilterRule> findFirstMatchingRule(Map<String, Object> eventPayload, String topic) {
         List<FilterRule> applicableRules = getApplicableRules(topic);
+        Map<String, String> columnMappings = columnMappingService.getMappingLookup();
 
         return applicableRules.stream()
-                .filter(rule -> ruleEngine.evaluate(rule, eventPayload, topic))
+                .filter(rule -> ruleEngine.evaluate(rule, eventPayload, topic, columnMappings))
                 .findFirst();
     }
 

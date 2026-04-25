@@ -195,22 +195,60 @@ curl http://localhost:8080/api/events/filtered/rule/<rule-id>
 | GET    | `/api/events/filtered/topic/{topic}`  | Filtered events by topic       |
 | GET    | `/api/events/filtered/rule/{ruleId}`  | Filtered events by rule        |
 
+### Column Mappings API
+
+| Method | Endpoint                | Description                          |
+|--------|-------------------------|--------------------------------------|
+| POST   | `/api/mappings`         | Create a new column-to-path mapping  |
+| GET    | `/api/mappings`         | List all column mappings             |
+| PUT    | `/api/mappings/{id}`    | Update a mapping                     |
+| DELETE | `/api/mappings/{id}`    | Delete a mapping                     |
+| GET    | `/api/mappings/lookup`  | Get columnName → payloadPath map     |
+
+## Column Mappings (DB-Driven)
+
+The mapping from rule column names to event payload paths is stored in the `column_mappings` MongoDB collection — **no hardcoded paths in Java code**.
+
+### Setup Mappings
+
+```bash
+# Map evtApplid → wfEvtInf/evtApplid
+curl -X POST http://localhost:8080/api/mappings \
+  -H "Content-Type: application/json" \
+  -d '{"columnName": "evtApplid", "payloadPath": "wfEvtInf/evtApplid", "description": "Event application ID"}'
+
+# Map evtNm → wfEvtInf/evtNm
+curl -X POST http://localhost:8080/api/mappings \
+  -H "Content-Type: application/json" \
+  -d '{"columnName": "evtNm", "payloadPath": "wfEvtInf/evtNm", "description": "Event name"}'
+
+# Map srcChnl → wfPmtOrdrPrcg/srcChnl
+curl -X POST http://localhost:8080/api/mappings \
+  -H "Content-Type: application/json" \
+  -d '{"columnName": "srcChnl", "payloadPath": "wfPmtOrdrPrcg/srcChnl", "description": "Source channel"}'
+```
+
+### Verify Mappings
+
+```bash
+curl http://localhost:8080/api/mappings/lookup
+# Returns: {"evtApplid": "wfEvtInf/evtApplid", "evtNm": "wfEvtInf/evtNm", "srcChnl": "wfPmtOrdrPrcg/srcChnl"}
+```
+
 ## Rule Matching
 
-Each rule maps named fields to nested event payload paths. When a Kafka event arrives, the `RecordFilterStrategy` checks all enabled rules **before the listener** — unmatched messages are silently discarded.
+When a Kafka event arrives, the `RecordFilterStrategy` checks all enabled rules **before the listener** — unmatched messages are silently discarded.
 
 ```
-Kafka Poll → RecordFilterStrategy (rules check) → discard if no match
-                                                 → @KafkaListener if matched → UPO → GPI Tracker
+Kafka Poll → RecordFilterStrategy (load mappings + rules from DB) → discard if no match
+                                                                   → @KafkaListener if matched → UPO → GPI Tracker
 ```
 
-| Rule Field    | Event Payload Path        | Description              |
-|---------------|---------------------------|--------------------------|
-| `evtApplid`   | `wfEvtInf/evtApplid`      | Event application ID     |
-| `evtNm`       | `wfEvtInf/evtNm`          | Event name               |
-| `srcChnl`     | `wfPmtOrdrPrcg/srcChnl`   | Source channel            |
-
-A rule matches when ALL non-null fields equal the event's corresponding nested values.
+The rule engine:
+1. Loads column mappings from `column_mappings` collection
+2. For each rule, resolves the payload path for each non-null field using the mapping
+3. Checks if the event's nested value at that path equals the rule's expected value
+4. A rule matches when ALL non-null fields match
 
 ## SWIFT GPI Tracker Integration
 
