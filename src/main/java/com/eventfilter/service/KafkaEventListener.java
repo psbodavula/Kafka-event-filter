@@ -15,6 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Only receives messages that already passed the RecordFilterStrategy (rule matching).
+ * This listener focuses on: audit logging, UPO conversion, and SWIFT GPI tracker updates.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,11 +34,10 @@ public class KafkaEventListener {
         Map<String, Object> payload = record.value();
         Map<String, String> headers = extractHeaders(record);
 
-        log.info("Received event on topic '{}': key={}", topic, record.key());
-        log.debug("Event payload: {}", payload);
+        log.info("Processing filtered event on topic '{}': key={}", topic, record.key());
 
         try {
-            // 1. Apply filter rules
+            // 1. Execute rule actions (forward/route/drop + audit trail)
             eventProcessingService.processEvent(topic, payload, headers);
 
             // 2. Convert JSON to UPO and call SWIFT GPI Tracker
@@ -45,7 +48,7 @@ public class KafkaEventListener {
                 GpiStatusUpdateResponse gpiResponse = swiftGpiTrackerService.updatePaymentStatus(upo);
 
                 if (gpiResponse.isSuccess()) {
-                    log.info("GPI Tracker updated successfully for UETR: {}, confirmation: {}",
+                    log.info("GPI Tracker updated for UETR: {}, confirmation: {}",
                             upo.getUetr(), gpiResponse.getConfirmationNumber());
                 } else {
                     log.warn("GPI Tracker update failed for UETR: {}: {}",
